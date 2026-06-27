@@ -99,6 +99,23 @@ export function loadStorage(): StorageSchema {
   }
 }
 
+// バックアップファイル(JSON文字列)を取り込む。
+// 「このアプリのバックアップか」を最低限検証し、不正なら例外を投げて取り込みを中止する。
+// （validate は欠損に寛容で空オブジェクトでも DEFAULT を返すため、そのまま流用すると
+//  別物JSONを読んでも“成功”扱いになり全データを消しかねない。ここで弾く。）
+export function parseImport(text: string): StorageSchema {
+  const raw = JSON.parse(text); // 失敗時は SyntaxError を投げる
+  if (!raw || typeof raw !== "object") {
+    throw new Error("不正なファイル形式です");
+  }
+  const r = raw as Record<string, unknown>;
+  if (r.version !== 1 || !Array.isArray(r.sessions) || !Array.isArray(r.exercises)) {
+    throw new Error("このアプリのバックアップファイルではありません");
+  }
+  // 形が合っていれば既存 validate で正規化。タイマーは引き継がない。
+  return { ...validate(raw), timer: null };
+}
+
 export function saveStorage(data: StorageSchema): void {
   if (typeof window === "undefined") return;
   try {

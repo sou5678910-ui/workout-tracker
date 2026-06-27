@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Dumbbell, Play, Video, Settings } from "lucide-react";
+import { Home, Dumbbell, Play, TrendingUp, Video, Settings } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "ホーム", icon: Home },
   { href: "/exercises", label: "種目", icon: Dumbbell },
   { href: "/menus", label: "メニュー", icon: Play },
+  { href: "/stats", label: "記録", icon: TrendingUp },
   { href: "/videos", label: "動画", icon: Video },
   { href: "/settings", label: "設定", icon: Settings },
 ];

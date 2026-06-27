@@ -121,6 +121,9 @@ interface AppContextValue {
   // 設定
   updateSettings: (patch: Partial<AppSettings>) => void;
 
+  // バックアップ（全データ差し替え）
+  importData: (next: StorageSchema) => void;
+
   // タイマー操作
   startTimer: (exerciseId: string, exerciseName: string, restSeconds: number) => void;
   pauseTimer: () => void;
@@ -450,6 +453,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [updateData]
   );
 
+  // ─── バックアップ ─────────────────────────────────────────────
+  // 検証済みの StorageSchema で全データを置き換える（state と localStorage を一括更新）
+  const importData = useCallback(
+    (next: StorageSchema) => {
+      updateData(() => next);
+    },
+    [updateData]
+  );
+
   // ─── タイマー操作 ─────────────────────────────────────────────
   const startTimer = useCallback(
     (exerciseId: string, exerciseName: string, restSeconds: number) => {
@@ -571,6 +583,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateVideo,
     deleteVideo,
     updateSettings,
+    importData,
     startTimer,
     pauseTimer,
     resumeTimer,
