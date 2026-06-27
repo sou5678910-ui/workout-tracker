@@ -6,7 +6,6 @@ import { useSessions } from "@/hooks/useSessions";
 import { useAppContext } from "@/contexts/AppContext";
 import { Play, Clock, ChevronRight, Dumbbell } from "lucide-react";
 import BottomSheet from "@/components/ui/BottomSheet";
-import type { WorkoutSession } from "@/types";
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -25,7 +24,8 @@ export default function HomePage() {
   const { sessions, startSession } = useSessions();
   const { data } = useAppContext();
   const [menuSheetOpen, setMenuSheetOpen] = useState(false);
-  const [detailSession, setDetailSession] = useState<WorkoutSession | null>(null);
+  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
+  const detailSession = detailSessionId ? data.sessions.find((s) => s.id === detailSessionId) ?? null : null;
 
   const recentSessions = [...sessions]
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
@@ -74,7 +74,7 @@ export default function HomePage() {
                 if (!s.endedAt) {
                   router.push(`/workout/${s.id}`);
                 } else {
-                  setDetailSession(s);
+                  setDetailSessionId(s.id);
                 }
               }}
               className="w-full p-4 rounded-xl flex items-center gap-3 text-left"
@@ -119,7 +119,7 @@ export default function HomePage() {
       {/* セッション詳細シート */}
       <BottomSheet
         open={!!detailSession}
-        onClose={() => setDetailSession(null)}
+        onClose={() => setDetailSessionId(null)}
         title={detailSession?.menuName ?? ""}
       >
         {detailSession && (() => {

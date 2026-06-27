@@ -1,5 +1,5 @@
 "use client";
-import { use, useState, useEffect, useCallback, useRef } from "react";
+import { use, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAppContext, unlockAudio } from "@/contexts/AppContext";
 import { DEFAULT_TARGET_SETS } from "@/lib/storage";
@@ -143,14 +143,13 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
     updateMenu(menu.id, { items: updatedItems });
   };
 
-  // 前回同メニューのコメントを取得
-  const lastNoteForCurrentExercise = (() => {
+  const lastNoteForCurrentExercise = useMemo(() => {
     if (!currentExercise || !menu) return "";
     const prev = [...data.sessions]
       .filter((s) => s.endedAt && s.menuId === menu.id && s.id !== sessionId)
       .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0];
     return prev?.exerciseNotes?.[currentExercise.id] ?? "";
-  })();
+  }, [data.sessions, menu, currentExercise, sessionId]);
 
   const handleEndWorkout = () => {
     if (!session) return;
@@ -163,7 +162,7 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
     }
     // コメント入力シートを開く
     const initial: Record<string, string> = {};
-    orderedExercises.forEach((e) => { initial[e.id] = ""; });
+    orderedExercises.forEach((e) => { initial[e.id] = session.exerciseNotes?.[e.id] ?? ""; });
     setNoteInputs(initial);
     setNeverShowNotes(false);
     setNoteSheetOpen(true);
@@ -546,7 +545,7 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
       {/* コメント入力シート */}
       <BottomSheet
         open={noteSheetOpen}
-        onClose={() => { endSession(sessionId); router.push("/"); }}
+        onClose={() => setNoteSheetOpen(false)}
         title="種目メモ（任意）"
       >
         <div className="flex flex-col gap-4 pb-2">
@@ -702,7 +701,11 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
             onClick={() => {
               if (!editingSet) return;
               updateSet(sessionId, editingSet.id, editInput.weight, editInput.reps);
-              refreshCompletedSets();
+              setCompletedSets((prev) =>
+                prev.map((s) =>
+                  s.id === editingSet.id ? { ...s, weight: editInput.weight, reps: editInput.reps } : s
+                )
+              );
               setEditingSet(null);
               setToast("セットを更新しました");
             }}
