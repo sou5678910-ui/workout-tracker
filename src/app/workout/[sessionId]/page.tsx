@@ -1,7 +1,7 @@
 "use client";
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useAppContext } from "@/contexts/AppContext";
+import { useAppContext, unlockAudio } from "@/contexts/AppContext";
 import { DEFAULT_TARGET_SETS } from "@/lib/storage";
 import type { WorkoutSet, Exercise, MenuItem } from "@/types";
 import { ArrowLeft, ChevronLeft, ChevronRight, Copy, CheckCircle, Video, Minus, Plus } from "lucide-react";
@@ -29,11 +29,15 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
   const {
     data,
     addSet,
+    updateSet,
+    updateExerciseNote,
     endSession,
     getLastSetsForExercise,
     getSession,
     startTimer,
+    endTimer,
     updateMenu,
+    updateSettings,
   } = useAppContext();
 
   const [exerciseIndex, setExerciseIndex] = useState(0);
@@ -42,6 +46,11 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
   const [lastSets, setLastSets] = useState<WorkoutSet[]>([]);
   const [toast, setToast] = useState("");
   const [videoSheetOpen, setVideoSheetOpen] = useState(false);
+  const [editingSet, setEditingSet] = useState<WorkoutSet | null>(null);
+  const [editInput, setEditInput] = useState<SetInputState>({ weight: 0, reps: 10 });
+  const [noteSheetOpen, setNoteSheetOpen] = useState(false);
+  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
+  const [neverShowNotes, setNeverShowNotes] = useState(false);
   const autoAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // セッションとメニューは data から取得（loadStorage() を使わない）
@@ -97,6 +106,7 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
 
   const handleCompleteSet = () => {
     if (!currentExercise || !session) return;
+    unlockAudio(); // ユーザー操作のタイミングでAudioContextを起動
     const newSet = addSet(sessionId, currentExercise.id, input.weight, input.reps);
     const newCompleted = [...completedSets, newSet];
     setCompletedSets(newCompleted);
@@ -133,9 +143,39 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
     updateMenu(menu.id, { items: updatedItems });
   };
 
+  // 前回同メニューのコメントを取得
+  const lastNoteForCurrentExercise = (() => {
+    if (!currentExercise || !menu) return "";
+    const prev = [...data.sessions]
+      .filter((s) => s.endedAt && s.menuId === menu.id && s.id !== sessionId)
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0];
+    return prev?.exerciseNotes?.[currentExercise.id] ?? "";
+  })();
+
   const handleEndWorkout = () => {
     if (!session) return;
     if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
+    endTimer();
+    if (data.settings.skipExerciseNotes) {
+      endSession(sessionId);
+      router.push("/");
+      return;
+    }
+    // コメント入力シートを開く
+    const initial: Record<string, string> = {};
+    orderedExercises.forEach((e) => { initial[e.id] = ""; });
+    setNoteInputs(initial);
+    setNeverShowNotes(false);
+    setNoteSheetOpen(true);
+  };
+
+  const handleSaveNotes = () => {
+    if (neverShowNotes) {
+      updateSettings({ skipExerciseNotes: true });
+    }
+    Object.entries(noteInputs).forEach(([exerciseId, note]) => {
+      if (note.trim()) updateExerciseNote(sessionId, exerciseId, note.trim());
+    });
     endSession(sessionId);
     router.push("/");
   };
@@ -281,6 +321,17 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
         )}
       </div>
 
+      {/* 前回コメント */}
+      {lastNoteForCurrentExercise && (
+        <div
+          className="px-3 py-2 rounded-xl text-sm"
+          style={{ background: "#1C1C2700", border: "1px solid #6C63FF33", color: "#9999BB" }}
+        >
+          <span className="text-xs" style={{ color: "#6C63FF" }}>前回メモ　</span>
+          {lastNoteForCurrentExercise}
+        </div>
+      )}
+
       {/* セット進捗 + 目標セット数調整 */}
       <div
         className="p-3 rounded-xl flex items-center justify-between gap-3"
@@ -294,26 +345,37 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
           {Array.from({ length: targetSets }).map((_, i) => {
             const set = completedSets[i];
             const done = !!set;
+            if (done) {
+              return (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setEditingSet(set);
+                    setEditInput({ weight: set.weight, reps: set.reps });
+                  }}
+                  aria-label={`SET ${i + 1} を編集`}
+                  className="flex flex-col items-center px-2 py-1.5 rounded-lg text-xs min-w-[44px]"
+                  style={{
+                    background: "#22C55E22",
+                    border: "1px solid #22C55E44",
+                  }}
+                >
+                  <span style={{ color: "#22C55E" }}>S{i + 1}</span>
+                  <span className="font-mono font-bold" style={{ color: "#22C55E" }}>
+                    {set.weight}kg
+                  </span>
+                  <span style={{ color: "#22C55E" }}>{set.reps}回</span>
+                </button>
+              );
+            }
             return (
               <div
                 key={i}
                 className="flex flex-col items-center px-2 py-1.5 rounded-lg text-xs min-w-[44px]"
-                style={{
-                  background: done ? "#22C55E22" : "#1C1C27",
-                  border: `1px solid ${done ? "#22C55E44" : "#2A2A3D"}`,
-                }}
+                style={{ background: "#1C1C27", border: "1px solid #2A2A3D" }}
               >
-                <span style={{ color: done ? "#22C55E" : "#9999BB" }}>S{i + 1}</span>
-                {done ? (
-                  <>
-                    <span className="font-mono font-bold" style={{ color: "#22C55E" }}>
-                      {set.weight}kg
-                    </span>
-                    <span style={{ color: "#22C55E" }}>{set.reps}回</span>
-                  </>
-                ) : (
-                  <span style={{ color: "#2A2A3D" }}>—</span>
-                )}
+                <span style={{ color: "#9999BB" }}>S{i + 1}</span>
+                <span style={{ color: "#2A2A3D" }}>—</span>
               </div>
             );
           })}
@@ -478,6 +540,177 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
           {exerciseVideos.map((v) => (
             <VideoLink key={v.id} video={v} />
           ))}
+        </div>
+      </BottomSheet>
+
+      {/* コメント入力シート */}
+      <BottomSheet
+        open={noteSheetOpen}
+        onClose={() => { endSession(sessionId); router.push("/"); }}
+        title="種目メモ（任意）"
+      >
+        <div className="flex flex-col gap-4 pb-2">
+          <p className="text-sm" style={{ color: "#9999BB" }}>
+            各種目のメモを残せます。次回同じメニューのときに表示されます。
+          </p>
+          {orderedExercises.map((ex) => (
+            <div key={ex.id} className="flex flex-col gap-1.5">
+              <p className="text-xs font-medium" style={{ color: "#F0F0FF" }}>{ex.name}</p>
+              <textarea
+                rows={2}
+                placeholder="例：肩甲骨を意識した"
+                value={noteInputs[ex.id] ?? ""}
+                onChange={(e) =>
+                  setNoteInputs((p) => ({ ...p, [ex.id]: e.target.value }))
+                }
+                className="w-full rounded-xl px-3 py-2 text-sm resize-none outline-none"
+                style={{
+                  background: "#1C1C27",
+                  border: "1px solid #2A2A3D",
+                  color: "#F0F0FF",
+                }}
+              />
+            </div>
+          ))}
+
+          {/* 今後表示しないチェック */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={neverShowNotes}
+              onChange={(e) => setNeverShowNotes(e.target.checked)}
+              className="w-4 h-4 accent-[#6C63FF]"
+            />
+            <span className="text-sm" style={{ color: "#9999BB" }}>
+              今後このメモ画面を表示しない
+            </span>
+          </label>
+
+          {/* ボタン */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { endSession(sessionId); router.push("/"); }}
+              className="flex-1 py-3 rounded-xl text-sm font-medium"
+              style={{ background: "#1C1C27", color: "#9999BB", border: "1px solid #2A2A3D" }}
+            >
+              書かない
+            </button>
+            <button
+              onClick={handleSaveNotes}
+              className="flex-1 py-3 rounded-xl text-sm font-semibold"
+              style={{ background: "#6C63FF", color: "#fff" }}
+            >
+              保存して終了
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* セット編集シート */}
+      <BottomSheet
+        open={!!editingSet}
+        onClose={() => setEditingSet(null)}
+        title="セットを編集"
+      >
+        <div className="flex flex-col gap-5 pb-2">
+          {/* 重量 */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-center font-medium uppercase tracking-widest" style={{ color: "#9999BB" }}>
+              重量 (kg)
+            </p>
+            <div className="flex items-center gap-1.5">
+              {([-5, -2.5, -1.25] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={() =>
+                    setEditInput((p) => ({
+                      ...p,
+                      weight: Math.max(0, Math.round((p.weight + d) * 100) / 100),
+                    }))
+                  }
+                  className="flex-1 py-3 rounded-xl text-xs font-bold"
+                  style={{ background: "#1C1C27", color: "#F0F0FF", border: "1px solid #2A2A3D" }}
+                >
+                  {d}
+                </button>
+              ))}
+              <input
+                type="number"
+                inputMode="decimal"
+                value={editInput.weight === 0 ? "" : editInput.weight}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setEditInput((p) => ({ ...p, weight: isNaN(v) ? 0 : v }));
+                }}
+                className="w-20 text-center py-3 text-2xl font-mono font-bold outline-none rounded-xl"
+                style={{ background: "#1C1C27", color: "#F0F0FF", border: "1px solid #6C63FF" }}
+              />
+              {([1.25, 2.5, 5] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={() =>
+                    setEditInput((p) => ({
+                      ...p,
+                      weight: Math.max(0, Math.round((p.weight + d) * 100) / 100),
+                    }))
+                  }
+                  className="flex-1 py-3 rounded-xl text-xs font-bold"
+                  style={{ background: "#1C1C27", color: "#F0F0FF", border: "1px solid #2A2A3D" }}
+                >
+                  +{d}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 回数 */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-center font-medium uppercase tracking-widest" style={{ color: "#9999BB" }}>
+              回数
+            </p>
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={() => setEditInput((p) => ({ ...p, reps: Math.max(1, p.reps - 1) }))}
+                className="w-14 h-14 rounded-xl text-2xl font-bold"
+                style={{ background: "#1C1C27", color: "#F0F0FF", border: "1px solid #2A2A3D" }}
+              >
+                −
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editInput.reps === 0 ? "" : editInput.reps}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  setEditInput((p) => ({ ...p, reps: isNaN(v) ? 0 : v }));
+                }}
+                className="w-24 text-center text-3xl font-mono font-bold outline-none rounded-xl py-3"
+                style={{ background: "#1C1C27", color: "#F0F0FF", border: "1px solid #6C63FF" }}
+              />
+              <button
+                onClick={() => setEditInput((p) => ({ ...p, reps: p.reps + 1 }))}
+                className="w-14 h-14 rounded-xl text-2xl font-bold"
+                style={{ background: "#1C1C27", color: "#F0F0FF", border: "1px solid #2A2A3D" }}
+              >
+                ＋
+              </button>
+            </div>
+          </div>
+
+          {/* 保存ボタン */}
+          <button
+            onClick={() => {
+              if (!editingSet) return;
+              updateSet(sessionId, editingSet.id, editInput.weight, editInput.reps);
+              refreshCompletedSets();
+              setEditingSet(null);
+              setToast("セットを更新しました");
+            }}
+            className="w-full py-4 rounded-2xl font-semibold text-lg"
+            style={{ background: "#6C63FF", color: "#fff" }}
+          >
+            保存
+          </button>
         </div>
       </BottomSheet>
     </div>

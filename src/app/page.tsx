@@ -3,8 +3,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMenus } from "@/hooks/useMenus";
 import { useSessions } from "@/hooks/useSessions";
+import { useAppContext } from "@/contexts/AppContext";
 import { Play, Clock, ChevronRight, Dumbbell } from "lucide-react";
 import BottomSheet from "@/components/ui/BottomSheet";
+import type { WorkoutSession } from "@/types";
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -21,7 +23,9 @@ export default function HomePage() {
   const router = useRouter();
   const { menus } = useMenus();
   const { sessions, startSession } = useSessions();
+  const { data } = useAppContext();
   const [menuSheetOpen, setMenuSheetOpen] = useState(false);
+  const [detailSession, setDetailSession] = useState<WorkoutSession | null>(null);
 
   const recentSessions = [...sessions]
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
@@ -64,9 +68,16 @@ export default function HomePage() {
             最近のトレーニング
           </p>
           {recentSessions.map((s) => (
-            <div
+            <button
               key={s.id}
-              className="p-4 rounded-xl flex items-center gap-3"
+              onClick={() => {
+                if (!s.endedAt) {
+                  router.push(`/workout/${s.id}`);
+                } else {
+                  setDetailSession(s);
+                }
+              }}
+              className="w-full p-4 rounded-xl flex items-center gap-3 text-left"
               style={{ background: "#13131A", border: "1px solid #2A2A3D" }}
             >
               <div
@@ -79,7 +90,7 @@ export default function HomePage() {
                 <p className="text-sm font-medium truncate" style={{ color: "#F0F0FF" }}>
                   {s.menuName}
                 </p>
-                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#8888AA" }}>
+                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#9999BB" }}>
                   <Clock size={11} />
                   {formatDate(s.startedAt)}
                   {s.endedAt ? "" : " (記録中)"}
@@ -88,7 +99,7 @@ export default function HomePage() {
               <p className="text-sm font-mono font-bold" style={{ color: "#6C63FF" }}>
                 {s.sets.length} set
               </p>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -104,6 +115,57 @@ export default function HomePage() {
           </p>
         </div>
       )}
+
+      {/* セッション詳細シート */}
+      <BottomSheet
+        open={!!detailSession}
+        onClose={() => setDetailSession(null)}
+        title={detailSession?.menuName ?? ""}
+      >
+        {detailSession && (() => {
+          const exerciseIds = [...new Set(detailSession.sets.map((s) => s.exerciseId))];
+          return (
+            <div className="flex flex-col gap-4 pb-2">
+              <p className="text-xs" style={{ color: "#9999BB" }}>
+                {formatDate(detailSession.startedAt)}
+                {detailSession.endedAt ? ` 〜 ${formatDate(detailSession.endedAt)}` : ""}
+              </p>
+              {exerciseIds.map((exId) => {
+                const exercise = data.exercises.find((e) => e.id === exId);
+                const sets = detailSession.sets.filter((s) => s.exerciseId === exId);
+                const note = detailSession.exerciseNotes?.[exId];
+                return (
+                  <div key={exId} className="flex flex-col gap-1.5">
+                    <p className="text-sm font-semibold" style={{ color: "#F0F0FF" }}>
+                      {exercise?.name ?? "不明な種目"}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sets.map((set, i) => (
+                        <div
+                          key={set.id}
+                          className="flex flex-col items-center px-2 py-1.5 rounded-lg text-xs min-w-[44px]"
+                          style={{ background: "#22C55E22", border: "1px solid #22C55E44" }}
+                        >
+                          <span style={{ color: "#22C55E" }}>S{i + 1}</span>
+                          <span className="font-mono font-bold" style={{ color: "#22C55E" }}>
+                            {set.weight}kg
+                          </span>
+                          <span style={{ color: "#22C55E" }}>{set.reps}回</span>
+                        </div>
+                      ))}
+                    </div>
+                    {note && (
+                      <p className="text-xs px-2" style={{ color: "#9999BB" }}>
+                        <span style={{ color: "#6C63FF" }}>メモ　</span>{note}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </BottomSheet>
 
       {/* メニュー選択シート */}
       <BottomSheet

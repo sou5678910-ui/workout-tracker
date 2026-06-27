@@ -45,19 +45,36 @@ function getAudioCtx(): AudioContext | null {
   }
 }
 
+// ユーザー操作後に呼んでおくと suspended 状態を解除できる
+export function unlockAudio() {
+  try {
+    const ctx = getAudioCtx();
+    if (ctx && ctx.state === "suspended") ctx.resume();
+  } catch {
+    // ignore
+  }
+}
+
 function beep() {
   try {
     const ctx = getAudioCtx();
     if (!ctx) return;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.6);
+    const doBeep = () => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.6);
+    };
+    if (ctx.state === "suspended") {
+      ctx.resume().then(doBeep).catch(() => {});
+    } else {
+      doBeep();
+    }
   } catch {
     // ignore
   }
@@ -90,6 +107,8 @@ interface AppContextValue {
   startSession: (menuId: string, menuName: string) => WorkoutSession;
   endSession: (sessionId: string) => void;
   addSet: (sessionId: string, exerciseId: string, weight: number, reps: number) => WorkoutSet;
+  updateSet: (sessionId: string, setId: string, weight: number, reps: number) => void;
+  updateExerciseNote: (sessionId: string, exerciseId: string, note: string) => void;
   getLastSetsForExercise: (exerciseId: string, excludeSessionId?: string) => WorkoutSet[];
   getSession: (sessionId: string) => WorkoutSession | undefined;
 
@@ -308,6 +327,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [updateData]
   );
 
+  const updateSet = useCallback(
+    (sessionId: string, setId: string, weight: number, reps: number) => {
+      updateData((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((s) =>
+          s.id === sessionId
+            ? {
+                ...s,
+                sets: s.sets.map((set) =>
+                  set.id === setId ? { ...set, weight, reps } : set
+                ),
+              }
+            : s
+        ),
+      }));
+    },
+    [updateData]
+  );
+
+  const updateExerciseNote = useCallback(
+    (sessionId: string, exerciseId: string, note: string) => {
+      updateData((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((s) =>
+          s.id === sessionId
+            ? { ...s, exerciseNotes: { ...(s.exerciseNotes ?? {}), [exerciseId]: note } }
+            : s
+        ),
+      }));
+    },
+    [updateData]
+  );
+
   const getLastSetsForExercise = useCallback(
     (exerciseId: string, excludeSessionId?: string): WorkoutSet[] => {
       const sorted = [...data.sessions]
@@ -510,6 +562,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     startSession,
     endSession,
     addSet,
+    updateSet,
+    updateExerciseNote,
     getLastSetsForExercise,
     getSession,
     addVideo,

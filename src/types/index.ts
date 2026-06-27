@@ -65,6 +65,7 @@ export interface WorkoutSession {
   startedAt: string;
   endedAt?: string;
   sets: WorkoutSet[];
+  exerciseNotes?: Record<string, string>; // exerciseId → コメント
 }
 
 // "idle" は timer: null で表現するため除外
@@ -82,6 +83,7 @@ export interface TimerState {
 
 export interface AppSettings {
   defaultRestSeconds: number;
+  skipExerciseNotes?: boolean; // true にするとコメント入力画面を表示しない
 }
 
 export interface StorageSchema {
