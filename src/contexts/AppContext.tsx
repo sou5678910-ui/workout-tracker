@@ -106,6 +106,7 @@ interface AppContextValue {
   // セッション
   startSession: (menuId: string, menuName: string) => WorkoutSession;
   endSession: (sessionId: string) => void;
+  deleteSession: (sessionId: string) => void;
   addSet: (sessionId: string, exerciseId: string, weight: number, reps: number) => WorkoutSet;
   updateSet: (sessionId: string, setId: string, weight: number, reps: number) => void;
   updateExerciseNote: (sessionId: string, exerciseId: string, note: string) => void;
@@ -302,6 +303,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         sessions: prev.sessions.map((s) =>
           s.id === sessionId ? { ...s, endedAt: new Date().toISOString() } : s
         ),
+      }));
+    },
+    [updateData]
+  );
+
+  const deleteSession = useCallback(
+    (sessionId: string) => {
+      updateData((prev) => ({
+        ...prev,
+        sessions: prev.sessions.filter((s) => s.id !== sessionId),
       }));
     },
     [updateData]
@@ -550,6 +561,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     deleteMenu,
     startSession,
     endSession,
+    deleteSession,
     addSet,
     updateSet,
     updateExerciseNote,
