@@ -8,6 +8,7 @@ import type { MenuItem } from "@/types";
 import { ArrowLeft, Plus, X, GripVertical, Save, Minus } from "lucide-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import Toast from "@/components/ui/Toast";
+import ExerciseForm from "@/components/exercise/ExerciseForm";
 import { DEFAULT_TARGET_SETS } from "@/lib/storage";
 
 export default function MenuDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,10 +16,11 @@ export default function MenuDetailPage({ params }: { params: Promise<{ id: strin
   const isNew = id === "new";
   const router = useRouter();
   const { menus, addMenu, updateMenu } = useMenus();
-  const { exercises } = useExercises();
+  const { exercises, addExercise } = useExercises();
   const [name, setName] = useState("");
   const [items, setItems] = useState<MenuItem[]>([]);
   const [addExOpen, setAddExOpen] = useState(false);
+  const [creatingExercise, setCreatingExercise] = useState(false);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -138,7 +140,7 @@ export default function MenuDetailPage({ params }: { params: Promise<{ id: strin
             種目
           </p>
           <button
-            onClick={() => setAddExOpen(true)}
+            onClick={() => { setCreatingExercise(false); setAddExOpen(true); }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium"
             style={{ background: "#6C63FF22", color: "#6C63FF", border: "1px solid #6C63FF44" }}
           >
@@ -243,30 +245,58 @@ export default function MenuDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* 種目選択シート */}
-      <BottomSheet open={addExOpen} onClose={() => setAddExOpen(false)} title="種目を追加">
-        {availableExercises.length === 0 ? (
-          <p className="text-center py-8 text-sm" style={{ color: "#9999BB" }}>
-            追加できる種目がありません
-          </p>
+      <BottomSheet
+        open={addExOpen}
+        onClose={() => { setAddExOpen(false); setCreatingExercise(false); }}
+        title={creatingExercise ? "新しい種目を作成" : "種目を追加"}
+      >
+        {creatingExercise ? (
+          <ExerciseForm
+            onSubmit={({ name, bodyPart, restSeconds }) => {
+              const ex = addExercise(name, bodyPart, restSeconds);
+              setItems((prev) => [
+                ...prev,
+                { exerciseId: ex.id, order: prev.length, targetSets: DEFAULT_TARGET_SETS },
+              ]);
+              setCreatingExercise(false); // シートは閉じず一覧へ戻る（連続追加できる）
+            }}
+            onCancel={() => setCreatingExercise(false)}
+          />
         ) : (
           <div className="flex flex-col gap-2">
-            {availableExercises.map((ex) => (
-              <button
-                key={ex.id}
-                onClick={() => addItem(ex.id)}
-                className="flex items-center gap-3 p-4 rounded-xl w-full text-left"
-                style={{ background: "#1C1C27", border: "1px solid #2A2A3D" }}
-              >
-                <div
-                  className="w-1 h-8 rounded-full flex-shrink-0"
-                  style={{ background: BODY_PART_COLORS[ex.bodyPart] }}
-                />
-                <div>
-                  <p className="text-sm font-medium" style={{ color: "#F0F0FF" }}>{ex.name}</p>
-                  <p className="text-xs" style={{ color: "#9999BB" }}>{ex.bodyPart}</p>
-                </div>
-              </button>
-            ))}
+            {/* 新しい種目を作成 */}
+            <button
+              onClick={() => setCreatingExercise(true)}
+              className="flex items-center justify-center gap-1.5 p-3 rounded-xl w-full text-sm font-medium"
+              style={{ background: "#6C63FF22", color: "#6C63FF", border: "1px dashed #6C63FF66" }}
+            >
+              <Plus size={15} />
+              新しい種目を作成
+            </button>
+
+            {availableExercises.length === 0 ? (
+              <p className="text-center py-6 text-sm" style={{ color: "#9999BB" }}>
+                追加できる既存の種目はありません
+              </p>
+            ) : (
+              availableExercises.map((ex) => (
+                <button
+                  key={ex.id}
+                  onClick={() => addItem(ex.id)}
+                  className="flex items-center gap-3 p-4 rounded-xl w-full text-left"
+                  style={{ background: "#1C1C27", border: "1px solid #2A2A3D" }}
+                >
+                  <div
+                    className="w-1 h-8 rounded-full flex-shrink-0"
+                    style={{ background: BODY_PART_COLORS[ex.bodyPart] }}
+                  />
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#F0F0FF" }}>{ex.name}</p>
+                    <p className="text-xs" style={{ color: "#9999BB" }}>{ex.bodyPart}</p>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         )}
       </BottomSheet>

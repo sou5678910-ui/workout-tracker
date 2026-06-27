@@ -125,7 +125,7 @@ interface AppContextValue {
   pauseTimer: () => void;
   resumeTimer: () => void;
   adjustTimer: (delta: number) => void;
-  endTimer: () => void;
+  clearTimer: () => void;
   saveTimerRestSeconds: (exerciseId: string, restSeconds: number) => void;
 }
 
@@ -521,21 +521,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const endTimer = useCallback(() => {
-    setData((prev) => {
-      if (!prev.timer) return prev;
-      const next = {
-        ...prev,
-        timer: {
-          ...prev.timer,
-          status: "ended" as const,
-          endsAt: new Date().toISOString(),
-        },
-      };
-      saveStorage(next);
-      return next;
-    });
-  }, []);
+  // タイマーを完全に消す（バーを画面から消す）
+  const clearTimer = useCallback(() => {
+    updateData((prev) => (prev.timer ? { ...prev, timer: null } : prev));
+  }, [updateData]);
 
   // 「この時間に固定」: 調整済みの restSeconds を種目に保存
   const saveTimerRestSeconds = useCallback(
@@ -574,7 +563,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     pauseTimer,
     resumeTimer,
     adjustTimer,
-    endTimer,
+    clearTimer,
     saveTimerRestSeconds,
   };
 

@@ -35,7 +35,7 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
     getLastSetsForExercise,
     getSession,
     startTimer,
-    endTimer,
+    clearTimer,
     updateMenu,
     updateSettings,
   } = useAppContext();
@@ -51,7 +51,14 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
   const [neverShowNotes, setNeverShowNotes] = useState(false);
+  const [completeSheetOpen, setCompleteSheetOpen] = useState(false);
   const autoAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completePromptedRef = useRef(false);
+
+  // セッションが変わったら「全種目完了」シートの表示済みフラグをリセット
+  useEffect(() => {
+    completePromptedRef.current = false;
+  }, [sessionId]);
 
   // セッションとメニューは data から取得（loadStorage() を使わない）
   const session = data.sessions.find((s) => s.id === sessionId);
@@ -118,18 +125,28 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
     const restSeconds = currentExercise.restSeconds ?? data.settings.defaultRestSeconds;
     startTimer(currentExercise.id, currentExercise.name, restSeconds);
 
+    // メニュー全体が完了したか判定（現種目は今追加分、他種目はsession.setsで集計）
+    const isMenuComplete = orderedExercises.every((ex) => {
+      const t = menu?.items.find((i) => i.exerciseId === ex.id)?.targetSets ?? DEFAULT_TARGET_SETS;
+      const c =
+        ex.id === currentExercise.id
+          ? newCompleted.length
+          : session.sets.filter((s) => s.exerciseId === ex.id).length;
+      return c >= t;
+    });
+
+    if (isMenuComplete && !completePromptedRef.current) {
+      completePromptedRef.current = true;
+      setCompleteSheetOpen(true);
+      return; // 自動送りを短絡（二重発火防止）
+    }
+
+    // 中間種目が目標到達 → 2秒後に自動で次の種目へ（合図はセットバッジと画面遷移）
     const newCount = newCompleted.length;
-    if (newCount >= targetSets) {
-      if (exerciseIndex < orderedExercises.length - 1) {
-        setToast(`${targetSets}セット達成！次の種目へ →`);
-        autoAdvanceRef.current = setTimeout(() => {
-          setExerciseIndex((i) => i + 1);
-        }, 2000);
-      } else {
-        setToast(`全種目完了！`);
-      }
-    } else {
-      setToast(`SET ${newCount} 完了（残り${targetSets - newCount}セット）`);
+    if (newCount >= targetSets && exerciseIndex < orderedExercises.length - 1) {
+      autoAdvanceRef.current = setTimeout(() => {
+        setExerciseIndex((i) => i + 1);
+      }, 2000);
     }
   };
 
@@ -154,7 +171,7 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
   const handleEndWorkout = () => {
     if (!session) return;
     if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
-    endTimer();
+    clearTimer();
     if (data.settings.skipExerciseNotes) {
       endSession(sessionId);
       router.push("/");
@@ -203,7 +220,7 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-4 flex flex-col gap-4">
-      <Toast message={toast} visible={!!toast} onHide={() => setToast("")} />
+      <Toast message={toast} visible={!!toast} onHide={() => setToast("")} position="bottom" />
 
       {/* ヘッダー */}
       <div className="flex items-center gap-2">
@@ -528,6 +545,36 @@ export default function WorkoutPage({ params }: { params: Promise<{ sessionId: s
           {isLastTargetSet && <span className="text-base opacity-80">（最終セット）</span>}
         </button>
       )}
+
+      {/* 全種目完了シート */}
+      <BottomSheet
+        open={completeSheetOpen}
+        onClose={() => setCompleteSheetOpen(false)}
+        title="全種目完了！"
+      >
+        <div className="flex flex-col gap-4 pb-2">
+          <p className="text-sm" style={{ color: "#9999BB" }}>
+            お疲れさまでした。セットを追加して続けるか、トレーニングを終了できます。
+          </p>
+          <button
+            onClick={() => setCompleteSheetOpen(false)}
+            className="w-full py-3 rounded-xl text-sm font-medium"
+            style={{ background: "#1C1C27", color: "#9999BB", border: "1px solid #2A2A3D" }}
+          >
+            セットを追加する
+          </button>
+          <button
+            onClick={() => {
+              setCompleteSheetOpen(false);
+              handleEndWorkout();
+            }}
+            className="w-full py-4 rounded-2xl font-semibold text-lg"
+            style={{ background: "#6C63FF", color: "#fff" }}
+          >
+            トレーニングを終了
+          </button>
+        </div>
+      </BottomSheet>
 
       {/* 動画シート */}
       <BottomSheet

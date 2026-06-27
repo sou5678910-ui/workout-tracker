@@ -10,7 +10,7 @@ export function useTimer() {
     pauseTimer,
     resumeTimer,
     adjustTimer,
-    endTimer,
+    clearTimer,
     saveTimerRestSeconds,
   } = useAppContext();
 
@@ -20,7 +20,7 @@ export function useTimer() {
     pauseTimer,
     resumeTimer,
     adjustTimer,
-    endTimer,
+    clearTimer,
     saveRestSeconds: saveTimerRestSeconds,
   };
 }

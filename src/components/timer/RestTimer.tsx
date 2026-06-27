@@ -11,7 +11,7 @@ function formatTime(seconds: number): string {
 }
 
 export default function RestTimer() {
-  const { display, adjustTimer, endTimer, pauseTimer, resumeTimer, saveRestSeconds } = useTimer();
+  const { display, adjustTimer, clearTimer, pauseTimer, resumeTimer, saveRestSeconds } = useTimer();
   const [savedFeedback, setSavedFeedback] = useState(false);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -93,12 +93,12 @@ export default function RestTimer() {
             )}
 
             <button
-              onClick={endTimer}
+              onClick={clearTimer}
               aria-label="タイマーを終了"
               className="px-3 py-2 rounded-lg text-xs font-medium"
               style={{ background: "#1C1C27", color: "#9999BB", border: "1px solid #2A2A3D" }}
             >
-              終了
+              タイマー終了
             </button>
           </div>
         </div>
